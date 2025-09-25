@@ -1,46 +1,101 @@
-# MySQL PersistentVolume
+# 02-storage.yaml - Local Storage Version
+
+# PersistentVolume cho MySQL (Local Storage)
 apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: mysql-pv
-  namespace: wordpress
+  labels:
+    app: mysql
 spec:
   capacity:
     storage: 10Gi
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: gp2
-  awsElasticBlockStore:
-    volumeID: vol-xxxxxxxxx  # Thay bằng EBS volume ID thực tế
-    fsType: ext4
+  storageClassName: local-storage
+  hostPath:
+    path: /data/mysql
+    type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: Exists
 
 ---
-# MySQL PersistentVolumeClaim
+# PersistentVolume cho WordPress (Local Storage)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: wordpress-pv
+  labels:
+    app: wordpress
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /data/wordpress
+    type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: Exists
+
+---
+# PersistentVolumeClaim cho MySQL
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: mysql-pvc
   namespace: wordpress
+  labels:
+    app: mysql
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
       storage: 10Gi
-  storageClassName: gp2
+  storageClassName: local-storage
+  selector:
+    matchLabels:
+      app: mysql
 
 ---
-# WordPress PersistentVolumeClaim
+# PersistentVolumeClaim cho WordPress
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: wordpress-pvc
   namespace: wordpress
+  labels:
+    app: wordpress
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
       storage: 5Gi
-  storageClassName: gp2
+  storageClassName: local-storage
+  selector:
+    matchLabels:
+      app: wordpress
+
+---
+# StorageClass cho Local Storage (tùy chọn)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-storage
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+allowVolumeExpansion: false
