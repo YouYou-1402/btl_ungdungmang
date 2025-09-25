@@ -10,8 +10,7 @@ spec:
   selector:
     matchLabels:
       app: wordpress
-  strategy:
-    type: Recreate
+  replicas: 2
   template:
     metadata:
       labels:
@@ -22,22 +21,26 @@ spec:
         name: wordpress
         env:
         - name: WORDPRESS_DB_HOST
-          value: mysql
+          value: mysql-service:3306
+        - name: WORDPRESS_DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: username
         - name: WORDPRESS_DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: mysql-secret
-              key: mysql-password
-        - name: WORDPRESS_DB_USER
-          valueFrom:
-            secretKeyRef:
-              name: wordpress-secret
-              key: mysql-user
+              key: password
         - name: WORDPRESS_DB_NAME
           valueFrom:
             secretKeyRef:
-              name: wordpress-secret
-              key: mysql-database
+              name: mysql-secret
+              key: database
+        - name: WORDPRESS_CONFIG_EXTRA
+          value: |
+            define('WP_HOME', 'https://mmt157.io.vn');
+            define('WP_SITEURL', 'https://mmt157.io.vn');
         ports:
         - containerPort: 80
           name: wordpress
@@ -46,39 +49,12 @@ spec:
           mountPath: /var/www/html
         resources:
           requests:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "256Mi"
+            cpu: "100m"
           limits:
-            memory: "1Gi"
-            cpu: "1000m"
-        livenessProbe:
-          httpGet:
-            path: /wp-admin/install.php
-            port: 80
-          initialDelaySeconds: 120
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /wp-admin/install.php
-            port: 80
-          initialDelaySeconds: 30
-          periodSeconds: 5
+            memory: "512Mi"
+            cpu: "250m"
       volumes:
       - name: wordpress-persistent-storage
         persistentVolumeClaim:
           claimName: wordpress-pvc
----
-# WordPress Service
-apiVersion: v1
-kind: Service
-metadata:
-  name: wordpress
-  namespace: wordpress
-  labels:
-    app: wordpress
-spec:
-  ports:
-    - port: 80
-  selector:
-    app: wordpress
-  type: ClusterIP

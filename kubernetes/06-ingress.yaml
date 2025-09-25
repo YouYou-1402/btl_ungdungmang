@@ -1,3 +1,4 @@
+# WordPress Ingress with SSL
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -5,14 +6,9 @@ metadata:
   namespace: wordpress
   annotations:
     kubernetes.io/ingress.class: nginx
-    cert-manager.io/cluster-issuer: letsencrypt-staging
+    cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
-    # Thêm annotations cho LoadBalancer
-    nginx.ingress.kubernetes.io/use-forwarded-headers: "true"
-    nginx.ingress.kubernetes.io/proxy-real-ip-cidr: "0.0.0.0/0"
 spec:
   tls:
   - hosts:
@@ -26,6 +22,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: wordpress
+            name: wordpress-service
             port:
               number: 80

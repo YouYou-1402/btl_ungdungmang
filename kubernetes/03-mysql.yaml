@@ -18,29 +18,29 @@ spec:
         app: mysql
     spec:
       containers:
-      - image: mysql
+      - image: mysql:8.0
         name: mysql
         env:
         - name: MYSQL_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
               name: mysql-secret
-              key: mysql-root-password
+              key: root-password
         - name: MYSQL_DATABASE
           valueFrom:
             secretKeyRef:
-              name: wordpress-secret
-              key: mysql-database
+              name: mysql-secret
+              key: database
         - name: MYSQL_USER
           valueFrom:
             secretKeyRef:
-              name: wordpress-secret
-              key: mysql-user
+              name: mysql-secret
+              key: username
         - name: MYSQL_PASSWORD
           valueFrom:
             secretKeyRef:
               name: mysql-secret
-              key: mysql-password
+              key: password
         ports:
         - containerPort: 3306
           name: mysql
@@ -50,45 +50,11 @@ spec:
         resources:
           requests:
             memory: "512Mi"
-            cpu: "500m"
+            cpu: "250m"
           limits:
             memory: "1Gi"
-            cpu: "1000m"
-        livenessProbe:
-          exec:
-            command:
-            - mysqladmin
-            - ping
-            - -h
-            - localhost
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          exec:
-            command:
-            - mysqladmin
-            - ping
-            - -h
-            - localhost
-          initialDelaySeconds: 5
-          periodSeconds: 2
+            cpu: "500m"
       volumes:
       - name: mysql-persistent-storage
         persistentVolumeClaim:
           claimName: mysql-pvc
----
-# MySQL Service
-apiVersion: v1
-kind: Service
-metadata:
-  name: mysql
-  namespace: wordpress
-  labels:
-    app: mysql
-spec:
-  ports:
-    - port: 3306
-  selector:
-    app: mysql
-  clusterIP: None
-  sessionAffinity: None 

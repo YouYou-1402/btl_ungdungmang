@@ -10,9 +10,11 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: standard
-  hostPath:
-    path: /data/mysql
+  storageClassName: gp2
+  awsElasticBlockStore:
+    volumeID: vol-xxxxxxxxx  # Thay bằng EBS volume ID thực tế
+    fsType: ext4
+
 ---
 # MySQL PersistentVolumeClaim
 apiVersion: v1
@@ -26,23 +28,8 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  storageClassName: standard
----
-# WordPress PersistentVolume
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: wordpress-pv
-  namespace: wordpress
-spec:
-  capacity:
-    storage: 10Gi
-  accessModes:
-    - ReadWriteOnce
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: standard
-  hostPath:
-    path: /data/wordpress
+  storageClassName: gp2
+
 ---
 # WordPress PersistentVolumeClaim
 apiVersion: v1
@@ -55,5 +42,5 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 10Gi
-  storageClassName: standard
+      storage: 5Gi
+  storageClassName: gp2
