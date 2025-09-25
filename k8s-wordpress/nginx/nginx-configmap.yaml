@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: wordpress
+data:
+  nginx.conf: |
+    events {
+        worker_connections 1024;
+    }
+    
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        
+        sendfile on;
+        keepalive_timeout 65;
+        client_max_body_size 64M;
+        
+        upstream php-fpm {
+            server wordpress-php-service:9000;
+        }
+    
+        server {
+            listen 80;
+            server_name mmt157.io.vn localhost;
+            root /var/www/html;
+            index index.php index.html;
+    
+            location / {
+                try_files $uri $uri/ /index.php?$args;
+            }
+    
+            location ~ \.php$ {
+                fastcgi_pass php-fpm;
+                fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+                include fastcgi_params;
+                fastcgi_param PATH_INFO $fastcgi_path_info;
+                fastcgi_param QUERY_STRING $query_string;
+            }
+    
+            location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+                expires 1y;
+                add_header Cache-Control "public";
+            }
+            
+            location /health {
+                access_log off;
+                return 200 "healthy\n";
+                add_header Content-Type text/plain;
+            }
+        }
+    }
