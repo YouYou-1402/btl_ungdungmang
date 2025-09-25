@@ -1,4 +1,4 @@
-# WordPress Ingress with SSL
+# WordPress Ingress with SSL (Tạm thời disable SSL redirect)
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -7,8 +7,11 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
     cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"  # ← THÊM: Tạm thời disable
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"  # ← THÊM: Tạm thời disable
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
 spec:
   tls:
   - hosts:
@@ -22,6 +25,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: wordpress-service
+            name: wordpress-service  # ← KHỚP VỚI SERVICE NAME
             port:
               number: 80
