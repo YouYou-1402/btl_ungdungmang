@@ -1,86 +1,128 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  # MySQL Database
-  mysql:
+  # ═══════════════════════════════════════
+  # DATABASE SERVICE - MySQL 8.0
+  # ═══════════════════════════════════════
+  db:
     image: mysql:8.0
-    container_name: wordpress_mysql
-    restart: unless-stopped
+    container_name: wordpress_db
+    restart: always
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./mysql-init:/docker-entrypoint-initdb.d
+      - mysql_data:/var/lib/mysql # Lưu trữ database
     networks:
-      - wordpress-network
-    ports:
-      - "${MYSQL_PORT}:3306"
-    command: --default-authentication-plugin=mysql_native_password
+      - wordpress_network
+    healthcheck: # Kiểm tra sức khỏe DB
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # PHP-FPM
-  php:
-    image: wordpress:php8.2-fpm
-    container_name: wordpress_php
-    restart: unless-stopped
+  # ═══════════════════════════════════════
+  # WORDPRESS SERVICE
+  # ═══════════════════════════════════════
+  wordpress:
     depends_on:
-      - mysql
+      db:
+        condition: service_healthy # Chờ DB sẵn sàng
+    image: wordpress:latest
+    container_name: wordpress_app
+    restart: always
     environment:
-      WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST}
-      WORDPRESS_DB_USER: ${WORDPRESS_DB_USER}
-      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD}
-      WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME}
-      WORDPRESS_CONFIG_EXTRA: |
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: ${MYSQL_USER}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
+      WORDPRESS_CONFIG_EXTRA: | # Cấu hình thêm cho WP
         define('WP_HOME', '${WP_HOME}');
         define('WP_SITEURL', '${WP_SITEURL}');
-        define('WP_MEMORY_LIMIT', '${PHP_MEMORY_LIMIT}');
-        ini_set('upload_max_filesize', '${PHP_UPLOAD_MAX_FILESIZE}');
-        ini_set('post_max_size', '${PHP_POST_MAX_SIZE}');
-        ini_set('memory_limit', '${PHP_MEMORY_LIMIT}');
+        define('FORCE_SSL_ADMIN', true);    # Bắt buộc SSL cho admin
+        if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+            $_SERVER['HTTPS'] = 'on';
+        }
     volumes:
-      - wordpress_data:/var/www/html
+      - wordpress_data:/var/www/html # Lưu trữ WordPress files
     networks:
-      - wordpress-network
+      - wordpress_network
+    # Không expose port ra ngoài, chỉ qua Nginx
 
-  # Nginx Web Server
+  # ═══════════════════════════════════════
+  # NGINX REVERSE PROXY + SSL
+  # ═══════════════════════════════════════
   nginx:
     image: nginx:alpine
     container_name: wordpress_nginx
-    restart: unless-stopped
+    restart: always
     depends_on:
-      - php
+      - wordpress
     ports:
-      - "${HTTP_PORT}:80"
-      - "${HTTPS_PORT}:443"
+      - "${HTTP_PORT}:80" # HTTP
+      - "${HTTPS_PORT}:443" # HTTPS
     volumes:
-      - wordpress_data:/var/www/html
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro # Nginx config
+      - wordpress_data:/var/www/html:ro # WordPress files (read-only)
+      - ./ssl:/etc/nginx/ssl:ro # SSL certificates
+      - nginx_logs:/var/log/nginx # Nginx logs
     networks:
-      - wordpress-network
+      - wordpress_network
+    healthcheck:
+      test:
+        ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # phpMyAdmin
+  # ═══════════════════════════════════════
+  # CERTBOT - Let's Encrypt SSL
+  # ═══════════════════════════════════════
+  certbot:
+    image: certbot/certbot
+    container_name: wordpress_certbot
+    volumes:
+      - ./ssl/certbot/conf:/etc/letsencrypt # SSL certificates
+      - ./ssl/certbot/www:/var/www/certbot # ACME challenge
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - wordpress_network
+
+  # ═══════════════════════════════════════
+  # PHPMYADMIN - Database Management
+  # ═══════════════════════════════════════
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
     container_name: wordpress_phpmyadmin
-    restart: unless-stopped
+    restart: always
     depends_on:
-      - mysql
+      - db
     environment:
-      PMA_HOST: mysql
-      PMA_PORT: 3306
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      PMA_HOST: db
+      PMA_USER: ${MYSQL_USER}
+      PMA_PASSWORD: ${MYSQL_PASSWORD}
+      PMA_ABSOLUTE_URI: https://${DOMAIN}:${PHPMYADMIN_PORT}/
     ports:
       - "${PHPMYADMIN_PORT}:80"
     networks:
-      - wordpress-network
+      - wordpress_network
 
+# ═══════════════════════════════════════
+# VOLUMES - Persistent Storage
+# ═══════════════════════════════════════
 volumes:
-  mysql_data:
-  wordpress_data:
+  mysql_data: # Database data
+    driver: local
+  wordpress_data: # WordPress files
+    driver: local
+  nginx_logs: # Nginx logs
+    driver: local
 
+# ═══════════════════════════════════════
+# NETWORKS - Internal Communication
+# ═══════════════════════════════════════
 networks:
-  wordpress-network:
+  wordpress_network:
     driver: bridge
