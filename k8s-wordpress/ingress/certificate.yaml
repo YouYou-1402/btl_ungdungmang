@@ -1,0 +1,14 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mmt157-tls-cert
+  namespace: wordpress
+spec:
+  secretName: mmt157-tls-secret
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: mmt157.io.vn
+  dnsNames:
+  - mmt157.io.vn
+  - www.mmt157.io.vn

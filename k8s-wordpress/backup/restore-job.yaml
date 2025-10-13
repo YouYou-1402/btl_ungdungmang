@@ -1,0 +1,254 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wordpress-mysql-restore
+  namespace: wordpress
+  labels:
+    app: restore
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: restore
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      
+      # Container 1: MySQL Restore
+      - name: mysql-restore
+        image: amazon/aws-cli:2.13.0
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          
+          # Install mysql client
+          yum install -y mysql
+          
+          BACKUP_DIR="/backup/mysql"
+          
+          echo "=========================================="
+          echo "Starting MySQL Restore"
+          echo "=========================================="
+          
+          mkdir -p $BACKUP_DIR
+          
+          # List available backups from S3
+          echo "Available backups in S3:"
+          aws s3 ls s3://${S3_BUCKET_NAME}/mysql/ --recursive | grep ".sql.gz"
+          
+          # Download latest backup from S3
+          echo ""
+          echo "Downloading latest backup from S3..."
+          LATEST_BACKUP=$(aws s3 ls s3://${S3_BUCKET_NAME}/mysql/ --recursive | grep ".sql.gz" | sort | tail -n 1 | awk '{print $4}')
+          
+          if [ -z "$LATEST_BACKUP" ]; then
+            echo "✗ No backup found in S3!"
+            exit 1
+          fi
+          
+          echo "Latest backup: $LATEST_BACKUP"
+          aws s3 cp s3://${S3_BUCKET_NAME}/${LATEST_BACKUP} $BACKUP_DIR/restore.sql.gz
+          
+          if [ $? -ne 0 ]; then
+            echo "✗ Failed to download backup from S3!"
+            exit 1
+          fi
+          
+          echo "✓ Backup downloaded successfully"
+          ls -lh $BACKUP_DIR/restore.sql.gz
+          
+          # Wait for MySQL to be ready
+          echo ""
+          echo "Waiting for MySQL to be ready..."
+          until mysql -h mysql-service -u root -p${MYSQL_ROOT_PASSWORD} -e "SELECT 1" > /dev/null 2>&1; do
+            echo "MySQL is unavailable - sleeping"
+            sleep 5
+          done
+          
+          echo "✓ MySQL is ready"
+          
+          # Restore database
+          echo ""
+          echo "Starting database restore..."
+          gunzip < $BACKUP_DIR/restore.sql.gz | mysql -h mysql-service -u root -p${MYSQL_ROOT_PASSWORD}
+          
+          if [ $? -eq 0 ]; then
+            echo "✓ MySQL restore completed successfully!"
+          else
+            echo "✗ MySQL restore failed!"
+            exit 1
+          fi
+          
+          # Verify restore
+          echo ""
+          echo "Verifying restore..."
+          mysql -h mysql-service -u root -p${MYSQL_ROOT_PASSWORD} -e "SHOW DATABASES;"
+          
+          echo "=========================================="
+          echo "MySQL Restore Completed Successfully!"
+          echo "=========================================="
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-root-password
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-s3-backup-secret
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-s3-backup-secret
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_DEFAULT_REGION
+          valueFrom:
+            secretKeyRef:
+              name: aws-s3-backup-secret
+              key: AWS_DEFAULT_REGION
+        - name: S3_BUCKET_NAME
+          valueFrom:
+            secretKeyRef:
+              name: aws-s3-backup-secret
+              key: S3_BUCKET_NAME
+        volumeMounts:
+        - name: backup-storage
+          mountPath: /backup
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      
+      # Container 2: WordPress Files Restore
+      - name: wordpress-restore
+        image: amazon/aws-cli:2.13.0
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          
+          BACKUP_DIR="/backup/wordpress"
+          
+          echo "=========================================="
+          echo "Starting WordPress Files Restore"
+          echo "=========================================="
+          
+          mkdir -p $BACKUP_DIR
+          
+          # List available backups from S3
+          echo "Available backups in S3:"
+          aws s3 ls s3://${S3_BUCKET_NAME}/wordpress/ --recursive | grep ".tar.gz"
+          
+          # Download latest backup from S3
+          echo ""
+          echo "Downloading latest backup from S3..."
+          LATEST_BACKUP=$(aws s3 ls s3://${S3_BUCKET_NAME}/wordpress/ --recursive | grep ".tar.gz" | sort | tail -n 1 | awk '{print $4}')
+          
+          if [ -z "$LATEST_BACKUP" ]; then
+            echo "✗ No backup found in S3!"
+            exit 1
+          fi
+          
+          echo "Latest backup: $LATEST_BACKUP"
+          aws s3 cp s3://${S3_BUCKET_NAME}/${LATEST_BACKUP} $BACKUP_DIR/restore.tar.gz
+          
+          if [ $? -ne 0 ]; then
+            echo "✗ Failed to download backup from S3!"
+            exit 1
+          fi
+          
+          echo "✓ Backup downloaded successfully"
+          ls -lh $BACKUP_DIR/restore.tar.gz
+          
+          # Backup current files (safety measure)
+          if [ "$(ls -A /wordpress)" ]; then
+            echo ""
+            echo "Creating safety backup of current files..."
+            tar -czf $BACKUP_DIR/wordpress_before_restore_$(date +%Y%m%d_%H%M%S).tar.gz -C /wordpress . 2>/dev/null || true
+            
+            # Upload safety backup to S3
+            aws s3 cp $BACKUP_DIR/wordpress_before_restore_*.tar.gz \
+              s3://${S3_BUCKET_NAME}/wordpress/safety/ 2>/dev/null || true
+          fi
+          
+          # Clear current files
+          echo ""
+          echo "Clearing current WordPress directory..."
+          rm -rf /wordpress/*
+          rm -rf /wordpress/.[!.]*
+          
+          # Restore files
+          echo ""
+          echo "Extracting backup..."
+          tar -xzf $BACKUP_DIR/restore.tar.gz -C /wordpress
+          
+          if [ $? -eq 0 ]; then
+            echo "✓ WordPress files restore completed successfully!"
+            echo ""
+            echo "Restored files (top 20):"
+            ls -lah /wordpress/ | head -20
+          else
+            echo "✗ WordPress files restore failed!"
+            exit 1
+          fi
+          
+          # Set proper permissions
+          echo ""
+          echo "Setting proper permissions..."
+          chown -R www-data:www-data /wordpress 2>/dev/null || true
+          find /wordpress -type d -exec chmod 755 {} \; 2>/dev/null || true
+          find /wordpress -type f -exec chmod 644 {} \; 2>/dev/null || true
+          
+          echo "=========================================="
+          echo "WordPress Files Restore Completed Successfully!"
+          echo "=========================================="
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-s3-backup-secret
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-s3-backup-secret
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_DEFAULT_REGION
+          valueFrom:
+            secretKeyRef:
+              name: aws-s3-backup-secret
+              key: AWS_DEFAULT_REGION
+        - name: S3_BUCKET_NAME
+          valueFrom:
+            secretKeyRef:
+              name: aws-s3-backup-secret
+              key: S3_BUCKET_NAME
+        volumeMounts:
+        - name: wordpress-storage
+          mountPath: /wordpress
+        - name: backup-storage
+          mountPath: /backup
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      
+      volumes:
+      - name: wordpress-storage
+        persistentVolumeClaim:
+          claimName: wordpress-pvc
+      - name: backup-storage
+        persistentVolumeClaim:
+          claimName: backup-pvc

@@ -1,0 +1,62 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wordpress-ingress
+  namespace: wordpress
+  annotations:
+    # AWS Load Balancer Controller annotations
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    
+    # Certificate annotations
+    alb.ingress.kubernetes.io/certificate-arn: ""  # Sẽ tự động lấy từ cert-manager
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    
+    # Health check
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-port: traffic-port
+    alb.ingress.kubernetes.io/healthcheck-path: /wp-admin/install.php
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+    alb.ingress.kubernetes.io/success-codes: '200,301,302'
+    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
+    
+    # Security
+    alb.ingress.kubernetes.io/security-groups: ""  # Thêm security group ID nếu cần
+    
+    # Performance
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=60
+    
+    # Tags
+    alb.ingress.kubernetes.io/tags: Environment=production,Application=wordpress,Domain=mmt157.io.vn
+spec:
+  tls:
+  - hosts:
+    - mmt157.io.vn
+    - www.mmt157.io.vn
+    secretName: mmt157-tls-secret
+  rules:
+  - host: mmt157.io.vn
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: wordpress-service
+            port:
+              number: 80
+  - host: www.mmt157.io.vn
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: wordpress-service
+            port:
+              number: 80
