@@ -1,0 +1,92 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mysql-restore
+  namespace: wordpress
+spec:
+  template:
+    spec:
+      containers:
+      - name: mysql-restore
+        image: mysql:8.0
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Tìm file backup mới nhất
+          LATEST_BACKUP=$(ls -t /backup/mysql_backup_*.sql | head -n 1)
+          
+          if [ -z "$LATEST_BACKUP" ]; then
+            echo "No backup file found!"
+            exit 1
+          fi
+          
+          echo "Restoring from: $LATEST_BACKUP"
+          
+          mysql -h mysql-service \
+            -u root \
+            -p${MYSQL_ROOT_PASSWORD} \
+            < $LATEST_BACKUP
+          
+          echo "Restore completed successfully!"
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-root-password
+        volumeMounts:
+        - name: backup-storage
+          mountPath: /backup
+      restartPolicy: Never
+      volumes:
+      - name: backup-storage
+        hostPath:
+          path: /mnt/backup/mysql
+          type: Directory
+  backoffLimit: 3
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wordpress-restore
+  namespace: wordpress
+spec:
+  template:
+    spec:
+      containers:
+      - name: wordpress-restore
+        image: busybox:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Tìm file backup mới nhất
+          LATEST_BACKUP=$(ls -t /backup/wordpress_backup_*.tar.gz | head -n 1)
+          
+          if [ -z "$LATEST_BACKUP" ]; then
+            echo "No backup file found!"
+            exit 1
+          fi
+          
+          echo "Restoring from: $LATEST_BACKUP"
+          
+          cd /wordpress
+          tar -xzf $LATEST_BACKUP
+          
+          echo "Restore completed successfully!"
+        volumeMounts:
+        - name: wordpress-storage
+          mountPath: /wordpress
+        - name: backup-storage
+          mountPath: /backup
+      restartPolicy: Never
+      volumes:
+      - name: wordpress-storage
+        persistentVolumeClaim:
+          claimName: wordpress-pvc
+      - name: backup-storage
+        hostPath:
+          path: /mnt/backup/wordpress
+          type: Directory
+  backoffLimit: 3

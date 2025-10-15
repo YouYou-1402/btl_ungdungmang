@@ -1,0 +1,92 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mysql-backup
+  namespace: wordpress
+spec:
+  schedule: "0 2 * * *"  # Chạy lúc 2h sáng hàng ngày
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: mysql-backup
+            image: mysql:8.0
+            command:
+            - /bin/sh
+            - -c
+            - |
+              BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+              mysqldump -h mysql-service \
+                -u root \
+                -p${MYSQL_ROOT_PASSWORD} \
+                --all-databases \
+                --single-transaction \
+                --quick \
+                --lock-tables=false \
+                > /backup/mysql_backup_${BACKUP_DATE}.sql
+              
+              # Giữ lại 7 bản backup gần nhất
+              cd /backup && ls -t mysql_backup_*.sql | tail -n +8 | xargs -r rm
+              
+              echo "Backup completed: mysql_backup_${BACKUP_DATE}.sql"
+            env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: mysql-root-password
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backup
+          restartPolicy: OnFailure
+          volumes:
+          - name: backup-storage
+            hostPath:
+              path: /mnt/backup/mysql
+              type: DirectoryOrCreate
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: wordpress-backup
+  namespace: wordpress
+spec:
+  schedule: "0 3 * * *"  # Chạy lúc 3h sáng hàng ngày
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: wordpress-backup
+            image: busybox:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+              cd /wordpress
+              tar -czf /backup/wordpress_backup_${BACKUP_DATE}.tar.gz .
+              
+              # Giữ lại 7 bản backup gần nhất
+              cd /backup && ls -t wordpress_backup_*.tar.gz | tail -n +8 | xargs -r rm
+              
+              echo "Backup completed: wordpress_backup_${BACKUP_DATE}.tar.gz"
+            volumeMounts:
+            - name: wordpress-storage
+              mountPath: /wordpress
+            - name: backup-storage
+              mountPath: /backup
+          restartPolicy: OnFailure
+          volumes:
+          - name: wordpress-storage
+            persistentVolumeClaim:
+              claimName: wordpress-pvc
+          - name: backup-storage
+            hostPath:
+              path: /mnt/backup/wordpress
+              type: DirectoryOrCreate
