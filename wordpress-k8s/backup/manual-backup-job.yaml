@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wordpress-manual-backup
+  namespace: wordpress
+spec:
+  template:
+    spec:
+      containers:
+      - name: backup
+        image: mysql:8.0
+        command:
+        - /bin/bash
+        - -c
+        - |
+          BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+          BACKUP_FILE="/backup/wordpress_manual_backup_${BACKUP_DATE}.sql"
+          
+          echo "🔄 Bắt đầu backup thủ công..."
+          mysqldump -h mysql.wordpress.svc.cluster.local \
+                    -u root \
+                    -p${MYSQL_ROOT_PASSWORD} \
+                    --all-databases \
+                    --single-transaction \
+                    --quick \
+                    --lock-tables=false \
+                    > ${BACKUP_FILE}
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Backup thành công: ${BACKUP_FILE}"
+            gzip ${BACKUP_FILE}
+            echo "✅ Đã nén file backup"
+            ls -lh /backup/
+          else
+            echo "❌ Backup thất bại!"
+            exit 1
+          fi
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_ROOT_PASSWORD
+        volumeMounts:
+        - name: backup-storage
+          mountPath: /backup
+      restartPolicy: Never
+      volumes:
+      - name: backup-storage
+        persistentVolumeClaim:
+          claimName: backup-pvc
+  backoffLimit: 3

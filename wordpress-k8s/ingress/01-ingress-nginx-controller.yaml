@@ -1,3 +1,0 @@
-# Cài đặt NGINX Ingress Controller
-# Chạy lệnh sau thay vì file này:
-# kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/aws/deploy.yaml

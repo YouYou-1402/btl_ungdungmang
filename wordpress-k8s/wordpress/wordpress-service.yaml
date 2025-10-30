@@ -3,18 +3,12 @@ kind: Service
 metadata:
   name: wordpress
   namespace: wordpress
-  labels:
-    app: wordpress
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
   - port: 80
     targetPort: 80
+    nodePort: 30080
     protocol: TCP
-    name: http
   selector:
     app: wordpress
-  sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: 3600

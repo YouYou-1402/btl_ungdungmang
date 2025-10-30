@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: wordpress-backup
+  namespace: wordpress
+spec:
+  schedule: "0 2 * * *"  # Chạy lúc 2h sáng hàng ngày
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: backup
+            image: mysql:8.0
+            command:
+            - /bin/bash
+            - -c
+            - |
+              BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+              BACKUP_FILE="/backup/wordpress_backup_${BACKUP_DATE}.sql"
+              
+              echo "🔄 Bắt đầu backup database..."
+              mysqldump -h mysql.wordpress.svc.cluster.local \
+                        -u root \
+                        -p${MYSQL_ROOT_PASSWORD} \
+                        --all-databases \
+                        --single-transaction \
+                        --quick \
+                        --lock-tables=false \
+                        > ${BACKUP_FILE}
+              
+              if [ $? -eq 0 ]; then
+                echo "✅ Backup thành công: ${BACKUP_FILE}"
+                gzip ${BACKUP_FILE}
+                echo "✅ Đã nén file backup"
+                
+                # Xóa backup cũ hơn 7 ngày
+                find /backup -name "wordpress_backup_*.sql.gz" -mtime +7 -delete
+                echo "✅ Đã xóa backup cũ hơn 7 ngày"
+              else
+                echo "❌ Backup thất bại!"
+                exit 1
+              fi
+            env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_ROOT_PASSWORD
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backup
+          restartPolicy: OnFailure
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: backup-pvc

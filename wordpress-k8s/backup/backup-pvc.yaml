@@ -1,14 +1,12 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mysql-pvc
+  name: backup-pvc
   namespace: wordpress
-  labels:
-    app: mysql
 spec:
   accessModes:
-    - ReadWriteOnce
-  storageClassName: local-path
+    - ReadWriteMany
+  storageClassName: local-storage
   resources:
     requests:
       storage: 10Gi

@@ -1,0 +1,53 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wordpress-restore
+  namespace: wordpress
+spec:
+  template:
+    spec:
+      containers:
+      - name: restore
+        image: mysql:8.0
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "📋 Danh sách file backup:"
+          ls -lh /backup/
+          
+          # Lấy file backup mới nhất
+          LATEST_BACKUP=$(ls -t /backup/wordpress_backup_*.sql.gz 2>/dev/null | head -1)
+          
+          if [ -z "$LATEST_BACKUP" ]; then
+            echo "❌ Không tìm thấy file backup!"
+            exit 1
+          fi
+          
+          echo "🔄 Đang restore từ: $LATEST_BACKUP"
+          
+          gunzip -c $LATEST_BACKUP | mysql -h mysql.wordpress.svc.cluster.local \
+                                            -u root \
+                                            -p${MYSQL_ROOT_PASSWORD}
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Restore thành công!"
+          else
+            echo "❌ Restore thất bại!"
+            exit 1
+          fi
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_ROOT_PASSWORD
+        volumeMounts:
+        - name: backup-storage
+          mountPath: /backup
+      restartPolicy: Never
+      volumes:
+      - name: backup-storage
+        persistentVolumeClaim:
+          claimName: backup-pvc
+  backoffLimit: 3

@@ -1,107 +1,42 @@
 #!/bin/bash
 
 # ============================================
-# SCRIPT TẠO LẠI TOÀN BỘ DỰ ÁN WORDPRESS K8S
+# SCRIPT TẠO CẤU TRÚC DỰ ÁN CHO GITHUB
 # ============================================
 
-set -e  # Dừng script nếu có lỗi
+set -e
 
 echo "=========================================="
-echo "🚀 BẮT ĐẦU TẠO LẠI DỰ ÁN WORDPRESS K8S"
+echo "📁 TẠO CẤU TRÚC DỰ ÁN WORDPRESS K8S"
 echo "=========================================="
 
-# Màu sắc cho output
-RED='\033[0;31m'
+# Màu sắc
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Hàm in màu
 print_success() {
     echo -e "${GREEN}✅ $1${NC}"
-}
-
-print_error() {
-    echo -e "${RED}❌ $1${NC}"
 }
 
 print_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
 }
 
-print_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
-}
-
 # ============================================
-# 1. XÓA DỰ ÁN CŨ (NẾU CÓ)
+# TẠO CẤU TRÚC THƯ MỤC
 # ============================================
-echo ""
-echo "=========================================="
-echo "🗑️  BƯỚC 1: XÓA DỰ ÁN CŨ"
-echo "=========================================="
-
-read -p "Bạn có muốn xóa dự án cũ không? (y/n): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    print_info "Đang xóa namespace wordpress..."
-    kubectl delete namespace wordpress --ignore-not-found=true
-    
-    print_info "Đợi namespace bị xóa hoàn toàn..."
-    kubectl wait --for=delete namespace/wordpress --timeout=60s 2>/dev/null || true
-    
-    print_success "Đã xóa dự án cũ"
-else
-    print_warning "Bỏ qua xóa dự án cũ"
-fi
-
-# ============================================
-# 2. TẠO CẤU TRÚC THƯ MỤC
-# ============================================
-echo ""
-echo "=========================================="
-echo "📁 BƯỚC 2: TẠO CẤU TRÚC THƯ MỤC"
-echo "=========================================="
-
 PROJECT_DIR="wordpress-k8s"
-cd ~
 
-if [ -d "$PROJECT_DIR" ]; then
-    print_warning "Thư mục $PROJECT_DIR đã tồn tại"
-    read -p "Bạn có muốn xóa và tạo lại không? (y/n): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm -rf $PROJECT_DIR
-        print_success "Đã xóa thư mục cũ"
-    fi
-fi
-
-mkdir -p $PROJECT_DIR/{mysql,wordpress,phpmyadmin,backup,ingress}
+print_info "Tạo cấu trúc thư mục..."
+mkdir -p $PROJECT_DIR/{mysql,wordpress,phpmyadmin,backup,ingress,scripts}
 cd $PROJECT_DIR
 
-print_success "Đã tạo cấu trúc thư mục"
-
 # ============================================
-# 3. TẠO NAMESPACE
+# MYSQL FILES
 # ============================================
-echo ""
-echo "=========================================="
-echo "🏗️  BƯỚC 3: TẠO NAMESPACE"
-echo "=========================================="
+print_info "Tạo MySQL files..."
 
-kubectl create namespace wordpress 2>/dev/null || print_warning "Namespace wordpress đã tồn tại"
-print_success "Namespace wordpress đã sẵn sàng"
-
-# ============================================
-# 4. TẠO PERSISTENT VOLUMES
-# ============================================
-echo ""
-echo "=========================================="
-echo "💾 BƯỚC 4: TẠO PERSISTENT VOLUMES"
-echo "=========================================="
-
-# MySQL PV
 cat > mysql/mysql-pv.yaml <<'EOF'
 apiVersion: v1
 kind: PersistentVolume
@@ -119,57 +54,6 @@ spec:
     type: DirectoryOrCreate
 EOF
 
-# WordPress PV
-cat > wordpress/wordpress-pv.yaml <<'EOF'
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: wordpress-pv
-spec:
-  capacity:
-    storage: 5Gi
-  accessModes:
-    - ReadWriteOnce
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-storage
-  hostPath:
-    path: /mnt/data/wordpress
-    type: DirectoryOrCreate
-EOF
-
-# Backup PV
-cat > backup/backup-pv.yaml <<'EOF'
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: backup-pv
-spec:
-  capacity:
-    storage: 10Gi
-  accessModes:
-    - ReadWriteMany
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-storage
-  hostPath:
-    path: /mnt/data/backup
-    type: DirectoryOrCreate
-EOF
-
-kubectl apply -f mysql/mysql-pv.yaml
-kubectl apply -f wordpress/wordpress-pv.yaml
-kubectl apply -f backup/backup-pv.yaml
-
-print_success "Đã tạo Persistent Volumes"
-
-# ============================================
-# 5. TẠO MYSQL
-# ============================================
-echo ""
-echo "=========================================="
-echo "🗄️  BƯỚC 5: TẠO MYSQL DATABASE"
-echo "=========================================="
-
-# MySQL PVC
 cat > mysql/mysql-pvc.yaml <<'EOF'
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -185,7 +69,6 @@ spec:
       storage: 5Gi
 EOF
 
-# MySQL Secret
 cat > mysql/mysql-secret.yaml <<'EOF'
 apiVersion: v1
 kind: Secret
@@ -200,7 +83,6 @@ stringData:
   MYSQL_PASSWORD: wordpress123
 EOF
 
-# MySQL Deployment
 cat > mysql/mysql-deployment.yaml <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
@@ -260,7 +142,6 @@ spec:
           claimName: mysql-pvc
 EOF
 
-# MySQL Service
 cat > mysql/mysql-service.yaml <<'EOF'
 apiVersion: v1
 kind: Service
@@ -277,22 +158,28 @@ spec:
     app: mysql
 EOF
 
-kubectl apply -f mysql/mysql-pvc.yaml
-kubectl apply -f mysql/mysql-secret.yaml
-kubectl apply -f mysql/mysql-deployment.yaml
-kubectl apply -f mysql/mysql-service.yaml
-
-print_success "Đã tạo MySQL"
-
 # ============================================
-# 6. TẠO WORDPRESS
+# WORDPRESS FILES
 # ============================================
-echo ""
-echo "=========================================="
-echo "📝 BƯỚC 6: TẠO WORDPRESS"
-echo "=========================================="
+print_info "Tạo WordPress files..."
 
-# WordPress PVC
+cat > wordpress/wordpress-pv.yaml <<'EOF'
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: wordpress-pv
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /mnt/data/wordpress
+    type: DirectoryOrCreate
+EOF
+
 cat > wordpress/wordpress-pvc.yaml <<'EOF'
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -308,7 +195,6 @@ spec:
       storage: 5Gi
 EOF
 
-# WordPress Deployment
 cat > wordpress/wordpress-deployment.yaml <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
@@ -377,7 +263,6 @@ spec:
           claimName: wordpress-pvc
 EOF
 
-# WordPress Service
 cat > wordpress/wordpress-service.yaml <<'EOF'
 apiVersion: v1
 kind: Service
@@ -395,21 +280,11 @@ spec:
     app: wordpress
 EOF
 
-kubectl apply -f wordpress/wordpress-pvc.yaml
-kubectl apply -f wordpress/wordpress-deployment.yaml
-kubectl apply -f wordpress/wordpress-service.yaml
-
-print_success "Đã tạo WordPress"
-
 # ============================================
-# 7. TẠO PHPMYADMIN
+# PHPMYADMIN FILES
 # ============================================
-echo ""
-echo "=========================================="
-echo "🔧 BƯỚC 7: TẠO PHPMYADMIN"
-echo "=========================================="
+print_info "Tạo PHPMyAdmin files..."
 
-# PHPMyAdmin Deployment
 cat > phpmyadmin/phpmyadmin-deployment.yaml <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
@@ -451,7 +326,6 @@ spec:
             cpu: "200m"
 EOF
 
-# PHPMyAdmin Service
 cat > phpmyadmin/phpmyadmin-service.yaml <<'EOF'
 apiVersion: v1
 kind: Service
@@ -469,81 +343,28 @@ spec:
     app: phpmyadmin
 EOF
 
-kubectl apply -f phpmyadmin/phpmyadmin-deployment.yaml
-kubectl apply -f phpmyadmin/phpmyadmin-service.yaml
-
-print_success "Đã tạo PHPMyAdmin"
-
 # ============================================
-# 8. TẠO INGRESS
+# BACKUP FILES
 # ============================================
-echo ""
-echo "=========================================="
-echo "🌐 BƯỚC 8: TẠO INGRESS"
-echo "=========================================="
+print_info "Tạo Backup files..."
 
-# WordPress Ingress
-cat > ingress/wordpress-ingress.yaml <<'EOF'
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+cat > backup/backup-pv.yaml <<'EOF'
+apiVersion: v1
+kind: PersistentVolume
 metadata:
-  name: wordpress-ingress
-  namespace: wordpress
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
+  name: backup-pv
 spec:
-  ingressClassName: traefik
-  rules:
-  - host: mmt157.io.vn
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: wordpress
-            port:
-              number: 80
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /mnt/data/backup
+    type: DirectoryOrCreate
 EOF
 
-# PHPMyAdmin Ingress
-cat > ingress/phpmyadmin-ingress.yaml <<'EOF'
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: phpmyadmin-ingress
-  namespace: wordpress
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
-spec:
-  ingressClassName: traefik
-  rules:
-  - host: pma.mmt157.io.vn
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: phpmyadmin
-            port:
-              number: 80
-EOF
-
-kubectl apply -f ingress/wordpress-ingress.yaml
-kubectl apply -f ingress/phpmyadmin-ingress.yaml
-
-print_success "Đã tạo Ingress"
-
-# ============================================
-# 9. TẠO BACKUP CRONJOB
-# ============================================
-echo ""
-echo "=========================================="
-echo "💾 BƯỚC 9: TẠO BACKUP SYSTEM"
-echo "=========================================="
-
-# Backup PVC
 cat > backup/backup-pvc.yaml <<'EOF'
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -559,7 +380,6 @@ spec:
       storage: 10Gi
 EOF
 
-# Backup CronJob
 cat > backup/backup-cronjob.yaml <<'EOF'
 apiVersion: batch/v1
 kind: CronJob
@@ -622,7 +442,6 @@ spec:
               claimName: backup-pvc
 EOF
 
-# Manual Backup Job
 cat > backup/manual-backup-job.yaml <<'EOF'
 apiVersion: batch/v1
 kind: Job
@@ -678,7 +497,6 @@ spec:
   backoffLimit: 3
 EOF
 
-# Restore Job Template
 cat > backup/restore-job.yaml <<'EOF'
 apiVersion: batch/v1
 kind: Job
@@ -735,71 +553,128 @@ spec:
   backoffLimit: 3
 EOF
 
-kubectl apply -f backup/backup-pvc.yaml
-kubectl apply -f backup/backup-cronjob.yaml
+# ============================================
+# INGRESS FILES
+# ============================================
+print_info "Tạo Ingress files..."
 
-print_success "Đã tạo Backup System"
+cat > ingress/wordpress-ingress.yaml <<'EOF'
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wordpress-ingress
+  namespace: wordpress
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: mmt157.io.vn
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: wordpress
+            port:
+              number: 80
+EOF
+
+cat > ingress/phpmyadmin-ingress.yaml <<'EOF'
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: phpmyadmin-ingress
+  namespace: wordpress
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: pma.mmt157.io.vn
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: phpmyadmin
+            port:
+              number: 80
+EOF
 
 # ============================================
-# 10. TẠO SCRIPT QUẢN LÝ
+# SCRIPTS
 # ============================================
-echo ""
-echo "=========================================="
-echo "📜 BƯỚC 10: TẠO SCRIPT QUẢN LÝ"
-echo "=========================================="
+print_info "Tạo management scripts..."
 
-# Script backup thủ công
-cat > backup/run-backup.sh <<'EOF'
-#!/bin/bash
-echo "🔄 Chạy backup thủ công..."
-kubectl delete job wordpress-manual-backup -n wordpress 2>/dev/null
-kubectl apply -f manual-backup-job.yaml
-kubectl wait --for=condition=complete --timeout=300s job/wordpress-manual-backup -n wordpress
-kubectl logs -n wordpress job/wordpress-manual-backup
-EOF
-
-# Script restore
-cat > backup/run-restore.sh <<'EOF'
-#!/bin/bash
-echo "⚠️  CẢNH BÁO: Thao tác này sẽ ghi đè dữ liệu hiện tại!"
-read -p "Bạn có chắc chắn muốn restore không? (yes/no): " confirm
-
-if [ "$confirm" != "yes" ]; then
-    echo "❌ Đã hủy restore"
-    exit 0
-fi
-
-echo "🔄 Đang restore database..."
-kubectl delete job wordpress-restore -n wordpress 2>/dev/null
-kubectl apply -f restore-job.yaml
-kubectl wait --for=condition=complete --timeout=300s job/wordpress-restore -n wordpress
-kubectl logs -n wordpress job/wordpress-restore
-EOF
-
-# Script xem logs
-cat > view-logs.sh <<'EOF'
+cat > scripts/deploy.sh <<'EOF'
 #!/bin/bash
 
 echo "=========================================="
-echo "📋 WORDPRESS LOGS"
+echo "🚀 TRIỂN KHAI WORDPRESS K8S"
 echo "=========================================="
-kubectl logs -n wordpress -l app=wordpress --tail=50
+
+# Tạo namespace
+echo "📦 Tạo namespace..."
+kubectl create namespace wordpress 2>/dev/null || echo "Namespace đã tồn tại"
+
+# Deploy MySQL
+echo "🗄️  Deploy MySQL..."
+kubectl apply -f ../mysql/mysql-pv.yaml
+kubectl apply -f ../mysql/mysql-pvc.yaml
+kubectl apply -f ../mysql/mysql-secret.yaml
+kubectl apply -f ../mysql/mysql-deployment.yaml
+kubectl apply -f ../mysql/mysql-service.yaml
+
+# Đợi MySQL sẵn sàng
+echo "⏳ Đợi MySQL sẵn sàng..."
+kubectl wait --for=condition=ready pod -l app=mysql -n wordpress --timeout=300s
+
+# Deploy WordPress
+echo "📝 Deploy WordPress..."
+kubectl apply -f ../wordpress/wordpress-pv.yaml
+kubectl apply -f ../wordpress/wordpress-pvc.yaml
+kubectl apply -f ../wordpress/wordpress-deployment.yaml
+kubectl apply -f ../wordpress/wordpress-service.yaml
+
+# Đợi WordPress sẵn sàng
+echo "⏳ Đợi WordPress sẵn sàng..."
+kubectl wait --for=condition=ready pod -l app=wordpress -n wordpress --timeout=300s
+
+# Deploy PHPMyAdmin
+echo "🔧 Deploy PHPMyAdmin..."
+kubectl apply -f ../phpmyadmin/phpmyadmin-deployment.yaml
+kubectl apply -f ../phpmyadmin/phpmyadmin-service.yaml
+
+# Đợi PHPMyAdmin sẵn sàng
+echo "⏳ Đợi PHPMyAdmin sẵn sàng..."
+kubectl wait --for=condition=ready pod -l app=phpmyadmin -n wordpress --timeout=300s
+
+# Deploy Backup
+echo "💾 Deploy Backup system..."
+kubectl apply -f ../backup/backup-pv.yaml
+kubectl apply -f ../backup/backup-pvc.yaml
+kubectl apply -f ../backup/backup-cronjob.yaml
+
+# Deploy Ingress
+echo "🌐 Deploy Ingress..."
+kubectl apply -f ../ingress/wordpress-ingress.yaml
+kubectl apply -f ../ingress/phpmyadmin-ingress.yaml
 
 echo ""
-echo "=========================================="
-echo "📋 MYSQL LOGS"
-echo "=========================================="
-kubectl logs -n wordpress -l app=mysql --tail=50
-
+echo "✅ TRIỂN KHAI HOÀN TẤT!"
 echo ""
-echo "=========================================="
-echo "📋 PHPMYADMIN LOGS"
-echo "=========================================="
-kubectl logs -n wordpress -l app=phpmyadmin --tail=50
+echo "📊 Trạng thái:"
+kubectl get pods -n wordpress
+echo ""
+kubectl get svc -n wordpress
+echo ""
+kubectl get ingress -n wordpress
 EOF
 
-# Script kiểm tra status
-cat > check-status.sh <<'EOF'
+cat > scripts/check-status.sh <<'EOF'
 #!/bin/bash
 
 echo "=========================================="
@@ -835,29 +710,62 @@ echo "🔹 Recent Backup Jobs:"
 kubectl get jobs -n wordpress | grep backup
 EOF
 
-# Script xóa dự án
-cat > delete-all.sh <<'EOF'
+cat > scripts/view-logs.sh <<'EOF'
 #!/bin/bash
 
-echo "⚠️  CẢNH BÁO: Thao tác này sẽ xóa toàn bộ dự án!"
-read -p "Bạn có chắc chắn muốn xóa không? (yes/no): " confirm
+echo "=========================================="
+echo "📋 WORDPRESS LOGS"
+echo "=========================================="
+kubectl logs -n wordpress -l app=wordpress --tail=50
+
+echo ""
+echo "=========================================="
+echo "📋 MYSQL LOGS"
+echo "=========================================="
+kubectl logs -n wordpress -l app=mysql --tail=50
+
+echo ""
+echo "=========================================="
+echo "📋 PHPMYADMIN LOGS"
+echo "=========================================="
+kubectl logs -n wordpress -l app=phpmyadmin --tail=50
+EOF
+
+cat > scripts/backup.sh <<'EOF'
+#!/bin/bash
+
+echo "🔄 Chạy backup thủ công..."
+kubectl delete job wordpress-manual-backup -n wordpress 2>/dev/null
+kubectl apply -f ../backup/manual-backup-job.yaml
+echo "⏳ Đợi backup hoàn thành..."
+kubectl wait --for=condition=complete --timeout=300s job/wordpress-manual-backup -n wordpress
+echo ""
+echo "📋 Logs:"
+kubectl logs -n wordpress job/wordpress-manual-backup
+EOF
+
+cat > scripts/restore.sh <<'EOF'
+#!/bin/bash
+
+echo "⚠️  CẢNH BÁO: Thao tác này sẽ ghi đè dữ liệu hiện tại!"
+read -p "Bạn có chắc chắn muốn restore không? (yes/no): " confirm
 
 if [ "$confirm" != "yes" ]; then
-    echo "❌ Đã hủy xóa"
+    echo "❌ Đã hủy restore"
     exit 0
 fi
 
-echo "🗑️  Đang xóa namespace wordpress..."
-kubectl delete namespace wordpress
-
-echo "🗑️  Đang xóa PersistentVolumes..."
-kubectl delete pv mysql-pv wordpress-pv backup-pv
-
-echo "✅ Đã xóa toàn bộ dự án"
+echo "🔄 Đang restore database..."
+kubectl delete job wordpress-restore -n wordpress 2>/dev/null
+kubectl apply -f ../backup/restore-job.yaml
+echo "⏳ Đợi restore hoàn thành..."
+kubectl wait --for=condition=complete --timeout=300s job/wordpress-restore -n wordpress
+echo ""
+echo "📋 Logs:"
+kubectl logs -n wordpress job/wordpress-restore
 EOF
 
-# Script scale
-cat > scale.sh <<'EOF'
+cat > scripts/scale.sh <<'EOF'
 #!/bin/bash
 
 if [ -z "$1" ]; then
@@ -878,67 +786,25 @@ echo "✅ Đã scale WordPress to $REPLICAS replicas"
 kubectl get pods -n wordpress -l app=wordpress
 EOF
 
-chmod +x backup/run-backup.sh
-chmod +x backup/run-restore.sh
-chmod +x view-logs.sh
-chmod +x check-status.sh
-chmod +x delete-all.sh
-chmod +x scale.sh
+cat > scripts/delete-all.sh <<'EOF'
+#!/bin/bash
 
-print_success "Đã tạo các script quản lý"
+echo "⚠️  CẢNH BÁO: Thao tác này sẽ xóa toàn bộ dự án!"
+read -p "Bạn có chắc chắn muốn xóa không? (yes/no): " confirm
 
-# ============================================
-# 11. TẠO README
-# ============================================
-echo ""
-echo "=========================================="
-echo "📖 BƯỚC 11: TẠO DOCUMENTATION"
-echo "=========================================="
+if [ "$confirm" != "yes" ]; then
+    echo "❌ Đã hủy xóa"
+    exit 0
+fi
 
-cat > README.md <<'EOF'
-# WordPress on Kubernetes - Dự án Hoàn Chỉnh
+echo "🗑️  Đang xóa namespace wordpress..."
+kubectl delete namespace wordpress
 
-## 📋 Mô tả
+echo "🗑️  Đang xóa PersistentVolumes..."
+kubectl delete pv mysql-pv wordpress-pv backup-pv
 
-Dự án triển khai WordPress trên Kubernetes với đầy đủ tính năng:
-- ✅ WordPress với 2 replicas
-- ✅ MySQL Database
-- ✅ PHPMyAdmin
-- ✅ Persistent Storage
-- ✅ Ingress (Traefik)
-- ✅ Auto Backup hàng ngày
-- ✅ Manual Backup/Restore
+echo "✅ Đã xóa toàn bộ dự án"
+EOF
 
-## 🏗️ Cấu trúc thư mục
-
-wordpress-k8s/
-├── mysql/                  # MySQL configs
-│   ├── mysql-pv.yaml
-│   ├── mysql-pvc.yaml
-│   ├── mysql-secret.yaml
-│   ├── mysql-deployment.yaml
-│   └── mysql-service.yaml
-├── wordpress/              # WordPress configs
-│   ├── wordpress-pv.yaml
-│   ├── wordpress-pvc.yaml
-│   ├── wordpress-deployment.yaml
-│   └── wordpress-service.yaml
-├── phpmyadmin/            # PHPMyAdmin configs
-│   ├── phpmyadmin-deployment.yaml
-│   └── phpmyadmin-service.yaml
-├── backup/                # Backup configs
-│   ├── backup-pv.yaml
-│   ├── backup-pvc.yaml
-│   ├── backup-cronjob.yaml
-│   ├── manual-backup-job.yaml
-│   ├── restore-job.yaml
-│   ├── run-backup.sh
-│   └── run-restore.sh
-├── ingress/               # Ingress configs
-│   ├── wordpress-ingress.yaml
-│   └── phpmyadmin-ingress.yaml
-├── check-status.sh        # Kiểm tra trạng thái
-├── view-logs.sh           # Xem logs
-├── scale.sh               # Scale WordPress
-└── delete-all.sh          # Xóa toàn bộ dự án
+chmod +x scripts/*.sh
 
