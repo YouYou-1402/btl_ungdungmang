@@ -1,4 +1,5 @@
 apiVersion: cert-manager.io/v1
+#dung de cap chung chi that 
 kind: ClusterIssuer
 metadata:
   name: letsencrypt-prod
@@ -14,6 +15,7 @@ spec:
           class: nginx
 ---
 apiVersion: cert-manager.io/v1
+#dung de cap chung chi tu ki
 kind: ClusterIssuer
 metadata:
   name: selfsigned-issuer
@@ -26,6 +28,7 @@ metadata:
   name: wordpress-cert
   namespace: wordpress
 spec:
+#Tao TLS secret wordpress-tls cho namespace wordpress
   secretName: wordpress-tls
   issuerRef:
     name: selfsigned-issuer

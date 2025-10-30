@@ -6,12 +6,12 @@ metadata:
   labels:
     app: mysql
 spec:
-  replicas: 1
+  replicas: 1        # MySQL chỉ chạy 1 Pod duy nhất
   selector:
     matchLabels:
       app: mysql
   strategy:
-    type: Recreate
+    type: Recreate    #Khi update Pod, Kubernetes xóa Pod cũ trước, rồi mới tạo Pod mới.
   template:
     metadata:
       labels:
@@ -23,6 +23,7 @@ spec:
         ports:
         - containerPort: 3306
           name: mysql
+          #MySQL đọc password, username, database từ Secret
         env:
         - name: MYSQL_ROOT_PASSWORD
           valueFrom:
@@ -44,16 +45,19 @@ spec:
             secretKeyRef:
               name: mysql-secret
               key: mysql-password
+              #PVC được gắn ở đây → dữ liệu không mất khi Pod bị xoá.
         volumeMounts:
         - name: mysql-storage
-          mountPath: /var/lib/mysql
+          mountPath: /var/lib/mysql   #Thu muc luu database
+          #gioi han tai nguyen
         resources:
           requests:
-            memory: "512Mi"
+            memory: "512Mi"  #RAM
             cpu: "500m"
           limits:
             memory: "1Gi"
             cpu: "1000m"
+            #kiem tra mysql con chay ko
         livenessProbe:
           exec:
             command:
@@ -64,6 +68,7 @@ spec:
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
+          #kiem tra xem da ss nhan DL chua
         readinessProbe:
           exec:
             command:

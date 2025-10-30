@@ -5,8 +5,9 @@ metadata:
   namespace: wordpress
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteOnce    #
   resources:
     requests:
-      storage: 10Gi
-  storageClassName: manual
+      storage: 10Gi   #
+  storageClassName: manual   #
+#khop PVC bind với PV

@@ -7,8 +7,8 @@ spec:
   capacity:
     storage: 10Gi
   accessModes:
-    - ReadWriteOnce
-  persistentVolumeReclaimPolicy: Retain
+    - ReadWriteOnce   #Chỉ một node trong cluster được phép ghi/đọc volume này.
+  persistentVolumeReclaimPolicy: Retain  #Khi PVC bị xóa → dữ liệu được giữ lại
   storageClassName: manual
   hostPath:
     path: "/mnt/data/mysql"

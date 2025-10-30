@@ -8,8 +8,9 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-  - port: 3306
-    targetPort: 3306
+  - port: 3306  #Pod khác sẽ truy cập qua Service trên cổng này(cong ma server cong bo)
+    targetPort: 3306  #chuyển traffic đến container MySQL đúng cổng nội bộ
     protocol: TCP
   selector:
     app: mysql
+#Nó sẽ liên kết Service với Pod có label app: mysql (tức Pod do deployment.yaml tạo ra).
