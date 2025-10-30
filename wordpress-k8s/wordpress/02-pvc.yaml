@@ -3,10 +3,12 @@ kind: PersistentVolumeClaim
 metadata:
   name: wordpress-pvc
   namespace: wordpress
+  labels:
+    app: wordpress
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: gp3
+  storageClassName: local-path
   resources:
     requests:
-      storage: 20Gi
+      storage: 10Gi

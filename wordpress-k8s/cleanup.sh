@@ -1,31 +1,49 @@
 #!/bin/bash
 
-# Script xóa toàn bộ WordPress deployment
+echo "=========================================="
+echo "Cleanup WordPress + MySQL"
+echo "=========================================="
+echo ""
 
-echo "=== Cảnh báo: Script này sẽ xóa toàn bộ WordPress deployment ==="
-read -p "Bạn có chắc chắn muốn tiếp tục? (yes/no): " confirm
+read -p "Bạn có chắc muốn xóa tất cả? (yes/no): " confirm
 
 if [ "$confirm" != "yes" ]; then
     echo "Hủy bỏ."
     exit 0
 fi
 
-echo "Đang xóa resources..."
+echo "Đang xóa..."
 
-# Xóa theo thứ tự ngược lại
-kubectl delete -f backup/01-backup-cronjob.yaml --ignore-not-found=true
-kubectl delete -f ingress/03-ingress.yaml --ignore-not-found=true
-kubectl delete -f wordpress/04-service.yaml --ignore-not-found=true
-kubectl delete -f wordpress/03-deployment.yaml --ignore-not-found=true
-kubectl delete -f wordpress/02-pvc.yaml --ignore-not-found=true
-kubectl delete -f wordpress/01-pv.yaml --ignore-not-found=true
-kubectl delete -f mysql/06-service.yaml --ignore-not-found=true
-kubectl delete -f mysql/05-deployment.yaml --ignore-not-found=true
-kubectl delete -f mysql/04-pvc.yaml --ignore-not-found=true
-kubectl delete -f mysql/03-pv.yaml --ignore-not-found=true
+# Xóa Ingress
+kubectl delete -f ingress/02-ingress.yaml --ignore-not-found=true
+
+# Xóa WordPress
+kubectl delete -f wordpress/ --ignore-not-found=true
+
+# Xóa MySQL
+kubectl delete -f mysql/04-deployment.yaml --ignore-not-found=true
+kubectl delete -f mysql/05-service.yaml --ignore-not-found=true
+
+# Xóa Backup
+kubectl delete -f backup/ --ignore-not-found=true
+
+# Xóa PVC (dữ liệu sẽ bị xóa)
+read -p "Xóa PVC và dữ liệu? (yes/no): " delete_data
+if [ "$delete_data" == "yes" ]; then
+    kubectl delete pvc --all -n wordpress
+    echo "✓ Đã xóa tất cả PVC"
+fi
+
+# Xóa Secret
+kubectl delete secret wordpress-tls -n wordpress --ignore-not-found=true
 kubectl delete -f mysql/02-secret.yaml --ignore-not-found=true
 
-# Xóa namespace (sẽ xóa tất cả resources còn lại)
-kubectl delete namespace wordpress --ignore-not-found=true
+# Xóa Namespace
+read -p "Xóa namespace wordpress? (yes/no): " delete_ns
+if [ "$delete_ns" == "yes" ]; then
+    kubectl delete namespace wordpress
+    echo "✓ Đã xóa namespace"
+fi
 
-echo "=== Xóa hoàn tất ==="
+echo ""
+echo "✓ Cleanup hoàn tất!"

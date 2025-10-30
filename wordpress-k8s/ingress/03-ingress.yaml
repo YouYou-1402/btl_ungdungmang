@@ -1,25 +1,14 @@
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+apiVersion: v1
+kind: PersistentVolumeClaim
 metadata:
-  name: wordpress-ingress
+  name: backup-pvc
   namespace: wordpress
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  labels:
+    app: backup
 spec:
-  ingressClassName: nginx
-  tls:
-  - hosts:
-    - mmt157.io.vn
-    secretName: wordpress-tls
-  rules:
-  - host: mmt157.io.vn
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: wordpress
-            port:
-              number: 80
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi

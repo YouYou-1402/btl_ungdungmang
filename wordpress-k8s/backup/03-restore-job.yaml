@@ -1,0 +1,105 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mysql-restore
+  namespace: wordpress
+  labels:
+    app: mysql-restore
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: mysql-restore
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: mysql-restore
+        image: mysql:8.0
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-root-password
+        - name: MYSQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-database
+        - name: MYSQL_HOST
+          value: "mysql.wordpress.svc.cluster.local"
+        # Thay đổi tên file backup cần restore ở đây
+        - name: BACKUP_FILE
+          value: "wordpress-20240101-020000.sql.gz"
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          
+          echo "=========================================="
+          echo "MySQL Restore Started: $(date)"
+          echo "=========================================="
+          
+          # Kiểm tra file backup tồn tại
+          if [ ! -f "/backup/${BACKUP_FILE}" ]; then
+            echo "❌ Error: Backup file not found: ${BACKUP_FILE}"
+            echo ""
+            echo "Available backups:"
+            ls -lh /backup/*.sql.gz 2>/dev/null || echo "No backups found"
+            exit 1
+          fi
+          
+          echo "✓ Backup file found: ${BACKUP_FILE}"
+          BACKUP_SIZE=$(du -h "/backup/${BACKUP_FILE}" | cut -f1)
+          echo "  Size: ${BACKUP_SIZE}"
+          
+          # Kiểm tra kết nối MySQL
+          echo ""
+          echo "Checking MySQL connection..."
+          until mysqladmin ping -h"${MYSQL_HOST}" -uroot -p"${MYSQL_ROOT_PASSWORD}" --silent; do
+            echo "Waiting for MySQL..."
+            sleep 3
+          done
+          echo "✓ MySQL is ready"
+          
+          # Restore database
+          echo ""
+          echo "Starting database restore..."
+          echo "⚠️  WARNING: This will overwrite existing data!"
+          
+          # Giải nén và restore
+          gunzip -c "/backup/${BACKUP_FILE}" | mysql -h"${MYSQL_HOST}" \
+            -uroot \
+            -p"${MYSQL_ROOT_PASSWORD}" \
+            "${MYSQL_DATABASE}"
+          
+          echo "✓ Database restored successfully"
+          
+          # Verify restore
+          echo ""
+          echo "Verifying restore..."
+          TABLE_COUNT=$(mysql -h"${MYSQL_HOST}" -uroot -p"${MYSQL_ROOT_PASSWORD}" \
+            -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${MYSQL_DATABASE}';" \
+            -s -N)
+          echo "✓ Tables in database: ${TABLE_COUNT}"
+          
+          echo ""
+          echo "=========================================="
+          echo "Restore Completed Successfully: $(date)"
+          echo "=========================================="
+        volumeMounts:
+        - name: backup-storage
+          mountPath: /backup
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: backup-storage
+        persistentVolumeClaim:
+          claimName: backup-pvc

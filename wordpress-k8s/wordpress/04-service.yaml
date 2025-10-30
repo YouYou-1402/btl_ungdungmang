@@ -11,5 +11,10 @@ spec:
   - port: 80
     targetPort: 80
     protocol: TCP
+    name: http
   selector:
     app: wordpress
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
