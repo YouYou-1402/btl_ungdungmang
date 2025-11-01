@@ -4,9 +4,9 @@ metadata:
   name: wordpress-ingress
   namespace: wordpress
   annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
+    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
-  ingressClassName: traefik
+  ingressClassName: nginx
   rules:
   - host: mmt157.io.vn
     http:
