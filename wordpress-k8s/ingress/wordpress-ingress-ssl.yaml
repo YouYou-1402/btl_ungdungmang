@@ -4,8 +4,15 @@ metadata:
   name: wordpress-ingress
   namespace: wordpress
   annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
 spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - mmt157.io.vn
+    secretName: wordpress-tls
   rules:
   - host: mmt157.io.vn
     http:

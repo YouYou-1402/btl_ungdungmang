@@ -4,8 +4,15 @@ metadata:
   name: phpmyadmin-ingress
   namespace: wordpress
   annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
 spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - pma.mmt157.io.vn
+    secretName: phpmyadmin-tls
   rules:
   - host: pma.mmt157.io.vn
     http:

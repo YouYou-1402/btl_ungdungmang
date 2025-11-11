@@ -1,32 +1,31 @@
-# ClusterIssuer cho Let's Encrypt Production
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: letsencrypt-prod
 spec:
   acme:
+    # Email để nhận thông báo về certificate
+    email: clapika1402@gmail.com  # ⚠️ THAY ĐỔI EMAIL NÀY
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: clapika1402@gmail.com  # Thay bằng email của bạn
     privateKeySecretRef:
-      name: letsencrypt-prod-key
+      name: letsencrypt-prod
     solvers:
     - http01:
         ingress:
-          class: alb
-
+          class: nginx
 ---
-# ClusterIssuer cho Let's Encrypt Staging (để test)
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: letsencrypt-staging
 spec:
   acme:
+    # Email để nhận thông báo về certificate
+    email: clapika1402@gmail.com  # ⚠️ THAY ĐỔI EMAIL NÀY
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: clapika1402@gmail.com # Thay bằng email của bạn
     privateKeySecretRef:
-      name: letsencrypt-staging-key
+      name: letsencrypt-staging
     solvers:
     - http01:
         ingress:
-          class: alb
+          class: nginx
